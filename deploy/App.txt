@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CA PPM Timesheet</title>
+    <!--  (c) 2016 CA Technologies.  All Rights Reserved. -->
+    <!--  Build Date: Wed Jan 25 2017 15:11:40 GMT-0700 (MST) -->
+    
+    <script type="text/javascript">
+        var APP_BUILD_DATE = "Wed Jan 25 2017 15:11:40 GMT-0700 (MST)";
+        var BUILDER = "kcorkan";
+        var CHECKSUM = 2752129514;
+    </script>
+    
+    <script type="text/javascript" src="/apps/x/sdk.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function() {
+             
+/**
+ * A link that pops up a version dialog box
+ */
+
+Ext.define('Rally.technicalservices.InfoLink',{
+    extend: 'Rally.ui.dialog.Dialog',
+    alias: 'widget.tsinfolink',
+    
+    /**
+     * @cfg {String} informationHtml
+     * Additional text to be displayed on the popup dialog (for exmaple,
+     * to add a description of the app's use or functionality)
+     */
+    informationHtml: null,
+    
+    /**
+     * 
+     * cfg {String} title
+     * The title for the dialog box
+     */
+    title: "Build Information",
+    
+    defaults: { padding: 5, margin: 5 },
+
+    closable: true,
+     
+    draggable: true,
+
+    autoShow: true,
+   
+    width: 350,
+    
+    informationalConfig: null,
+    
+    items: [{xtype:'container', itemId:'information' }],
+    
+    initComponent: function() {
+        var id = Ext.id(this);
+        this.title =  "<span class='icon-help'> </span>" + this.title;
+        this.callParent(arguments);
+    },
+    
+    _generateChecksum: function(string){
+        var chk = 0x12345678,
+            i;
+        string = string.replace(/var CHECKSUM = .*;/,"");
+        string = string.replace(/var BUILDER = .*;/,"");
+        string = string.replace(/\s/g,"");  //Remove all whitespace from the string.
+       
+        for (i = 0; i < string.length; i++) {
+            chk += (string.charCodeAt(i) * i);
+        }
+   
+        return chk;
+    },
+    
+    _checkChecksum: function(container) {
+        var deferred = Ext.create('Deft.Deferred');
+        var me = this;
+        
+        Ext.Ajax.request({
+            url: document.URL,
+            params: {
+                id: 1
+            },
+            success: function (response) {
+                text = response.responseText;
+                if ( CHECKSUM ) {
+                    var stored_checksum = me._generateChecksum(text);
+                    if ( CHECKSUM !== stored_checksum ) {
+                        deferred.resolve(false);
+                        return;
+                    }
+                }
+                deferred.resolve(true);
+            }
+        });
+        
+        return deferred.promise;
+    },
+    
+    _addToContainer: function(container){
+        var config = Ext.apply({
+            xtype:'container',
+            height: 200,
+            overflowY: true
+        }, this.informationalConfig);
+        
+        container.add(config);
+    },
+    
+    afterRender: function() {
+        var app = Rally.getApp();
+        
+        if ( !Ext.isEmpty( this.informationalConfig ) ) {
+            var container = this.down('#information');
+            this._addToContainer(container);
+            
+        }
+        
+        if (! app.isExternal() ) {
+            this._checkChecksum(app).then({
+                scope: this,
+                success: function(result){
+                    if ( !result ) {
+                        this.addDocked({
+                            xtype:'container',
+                            cls: 'build-info',
+                            dock: 'bottom',
+                            padding: 2,
+                            html:'<span class="icon-warning"> </span>Checksums do not match'
+                        });
+                    }
+                },
+                failure: function(msg){
+                    console.log("oops:",msg);
+                }
+            });
+        } else {
+            this.addDocked({
+                xtype:'container',
+                cls: 'build-info',
+                padding: 2,
+                dock: 'bottom',
+                html:'... Running externally'
+            });
+        }
+        this.callParent(arguments);
+    },
+    
+    beforeRender: function() {
+        var me = this;
+        this.callParent(arguments);
+
+        if (this.informationHtml) {
+            this.addDocked({
+                xtype: 'component',
+                componentCls: 'intro-panel',
+                padding: 2,
+                html: this.informationHtml,
+                doc: 'top'
+            });
+        }
+        
+        this.addDocked({
+            xtype:'container',
+            cls: 'build-info',
+            padding: 2,
+            dock:'bottom',
+            html:"This app was created by the CA AC Technical Services Team."
+        });
+        
+        if ( APP_BUILD_DATE ) {
+            this.addDocked({
+                xtype:'container',
+                cls: 'build-info',
+                padding: 2,
+                dock: 'bottom',
+                html: Ext.String.format("Build date/time: {0} ({1})",
+                    APP_BUILD_DATE,
+                    BUILDER)
+            });
+        }
+    }
+});
+
+/*
+ */
+Ext.define('Rally.technicalservices.Logger',{
+    constructor: function(config){
+        Ext.apply(this,config);
+    },
+    log: function(args){
+        var timestamp = "[ " + Ext.util.Format.date(new Date(), "Y-m-d H:i:s.u") + " ]";
+        //var output_args = arguments;
+        //output_args.unshift( [ "[ " + timestamp + " ]" ] );
+        //output_args = Ext.Array.push(output_args,arguments);
+        
+        var output_args = [];
+        output_args = Ext.Array.push(output_args,[timestamp]);
+        output_args = Ext.Array.push(output_args, Ext.Array.slice(arguments,0));
+
+        window.console && console.log.apply(console,output_args);
+    }
+
+});
+
+
+Ext.define('Rally.apps.ppmtimesheet.PPMTimesheetApp', {
+    extend: 'Rally.app.App',
+
+    logger: new Rally.technicalservices.Logger(),
+
+    mixins: ['Rally.clientmetrics.ClientMetricsRecordable'],
+
+    appName: 'CA PPM Timesheet Frame',
+
+    config: {
+        defaultSettings: {
+            ppmHost: null,
+            ppmPort: 443,
+            ppmRelativePathWithParams: null
+        }
+    },
+    autoScroll: false,
+    timesheetSuffix:  '/pm/integration.html#',
+
+    launch: function() {
+
+        var server = this.getPPMHost(),
+            port = this.getPPMPort();
+        
+         this.validateConfig(server, port).then({
+                success: this.addFrame,
+                failure: this.showAppMessage,
+                scope: this
+        });
+    },
+    addFrame: function(){
+        this.logger.log('addFrame');
+        var server = this.getPPMHost(),
+            port = this.getPPMPort(),
+            relativePath = this.getPPMRelativePath(),
+            url = this.buildPPMTimesheetURL(server, port, relativePath);
+
+        try {
+
+            this.add({
+                xtype: 'container',
+                html: '<div class="secondary-message" style="font-family: ProximaNova,Helvetica,Arial;text-align:center;color:#8a8a8a;font-size:10pt;font-style:italic">Login to CA PPM Timesheet through Agile Central is recommended only when using a private computer'
+            });
+
+            var iframe = this.add({
+                xtype: 'component',
+                itemId: 'ppmIframe',
+                autoEl: {
+                    tag: 'iframe',
+                    style: 'height: 100%; width: 100%; border: none;',
+                    src: url
+                }
+            });
+
+
+            var me = this;
+            iframe.getEl().dom.onload = function(e){
+                me.logger.log('iframe loaded', e, iframe.getEl().dom);
+            };
+        }
+        catch(e){
+            Rally.ui.notify.Notifier.showError({message: Ext.String.format("Error loading {0} into iFrame.",url)});
+        }
+
+    },
+    validateConfig: function(server, port){
+        var deferred = Ext.create('Deft.Deferred');
+
+        if (!server){
+            deferred.reject("No CA PPM Server and Port is configured.  Please work with an administrator to configure your CA PPM https server.");
+        } else {
+            //Commented this out due to the chrome issue, as this fails on it.
+            //var httpRequest = new XMLHttpRequest(),
+            //    suffix = '/ppm/rest/v1/private/userContext',
+            //url = this.buildPPMTimesheetURL(server, port);
+            //
+            //url = url.replace(this.timesheetSuffix, suffix);
+            //
+            //httpRequest.withCredentials = true;
+            //httpRequest.cors = true;
+            //httpRequest.onreadystatechange = function() {
+            //    console.log('ready', httpRequest.readyState, httpRequest.status);
+            //    if (httpRequest.readyState === 4) {
+            //        console.log('readystate', httpRequest);
+            //        if (httpRequest.status !== 200) {
+            //            console.log('Failed', httpRequest.status);
+            //            var msg = Ext.String.format('The CA PPM Server and Port provided is not responding as expected. Please verify the configuration in the App Settings.');
+            //            deferred.reject(msg);
+            //        } else {
+                        deferred.resolve();
+            //        }
+            //    }
+            //};
+            //httpRequest.open('GET', url);
+            //httpRequest.send();
+        }
+
+        return deferred;
+    },
+    buildPPMTimesheetURL: function(server, port, relativePath){
+        var httpsIndex = server.indexOf( "https://" );
+        //var url = server.startsWith( "https://" ) ? server : Ext.String.format("https://{0}",server);
+        var url = httpsIndex == 0 ? server : Ext.String.format("https://{0}",server);
+        if (port){
+            url = Ext.String.format("{0}:{1}", url, port);
+        }
+        // if relative path is given then either it's SSO environment or default timesheet suffix is not needed
+        if( relativePath ) {
+            var urlLastChar = url.charAt(url.length - 1);
+            var rPathFirstChar = relativePath.charAt(0);
+            //if( !urlLastChar.endsWith("/") && !relativePath.startsWith("/") ) {
+            if( urlLastChar != "/" && rPathFirstChar != "/" ) {
+              url = url + "/";
+            } 
+            return url + relativePath;
+        } else {
+            return url + this.timesheetSuffix;        	
+        }
+    },
+    getPPMHost: function(){
+        return this.getSetting('ppmHost') || null;
+    },
+    getPPMPort: function(){
+        return this.getSetting('ppmPort') || null;
+    },
+    getPPMRelativePath: function(){
+        return this.getSetting('ppmRelativePathWithParams') || null;
+    },
+    showAppMessage: function(msg){
+        this.removeAll();
+        this.add({
+            xtype: 'container',
+            html: Ext.String.format('<div class="no-data-container"><div class="secondary-message">{0}</div></div>',msg)
+        });
+    },
+    getSettingsFields: function () {
+
+        return [{
+            xtype: 'container',
+            html: '<div class="secondary-message" style="font-family: ProximaNovaBold,Helvetica,Arial;text-align:left;color:#B81B10;font-size:12pt;">NOTE:  The CA PPM server must be version 15.2 or above.</div>'
+        },{
+            name: 'ppmHost',
+            xtype: 'rallytextfield',
+            width: 400,
+            labelWidth: 120,
+            labelAlign: 'right',
+            fieldLabel: 'CA PPM Host Name (For SSO this will be IDP URL)',
+            margin: '10 0 10 0',
+            maskRe:  /[a-zA-Z0-9\.\-]/,
+            emptyText: 'Please enter a Host name or IP Address...',
+            maxLength: 500
+        },{
+            name: 'ppmPort',
+            xtype:'rallynumberfield',
+            labelAlign: 'right',
+            fieldLabel: 'CA PPM Port (HTTPS)',
+            labelWidth: 120,
+            emptyText: 443,
+            minValue: 0,
+            maxValue: 65535,
+            allowBlank: true,
+            allowDecimals: false,
+            allowExponential: false
+        },{
+            name: 'ppmRelativePathWithParams',
+            xtype: 'rallytextfield',
+            width: 605,
+            labelWidth: 120,
+            labelAlign: 'right',
+            fieldLabel: 'CA PPM Timesheet Path (For SSO only)',
+            margin: '10 0 10 0',
+            //maskRe:  /[a-zA-Z0-9\.\-]/,
+            //emptyText: 'In SSO environment, enter relative path with parameters of IdP initiated SSO CA PPM URL here and enter host address above ...',
+            emptyText: 'In SSO environment, enter relative path with any parameters of IdP initiated SSO CA PPM URL here...',
+            maxLength: 500
+        }];
+    }
+});
+  
+               Rally.launchApp('Rally.apps.ppmtimesheet.PPMTimesheetApp', {
+                   name: 'CA PPM Timesheet'
+               });
+        });
+    </script>
+    
+    <style type="text/css">
+
+.app {
+}
+.tsinfolink {
+    position:absolute;
+    right:0px;
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    text-align: center;
+    color: white;
+    background: #C0C0C0;
+    border-style: solid;
+    border-width: 1px;
+    margin-top: 25px;
+    margin-right: 5px;
+    cursor: pointer;
+}
+
+.noScrolling {
+    overflow: hidden;
+}
+    </style>
+
+</head>
+<body></body>
+</html>
